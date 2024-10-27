@@ -1,3 +1,10 @@
+
+
+启用
+node main.js
+
+
+
 # Mindcraft 🧠⛏️
 
 Crafting minds for Minecraft with Language Models and Mineflayer!

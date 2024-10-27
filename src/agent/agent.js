@@ -12,8 +12,10 @@ import { addViewer } from './viewer.js';
 import settings from '../../settings.js';
 
 export class Agent {
-    async start(profile_fp, load_mem=false, init_message=null, count_id=0) {
-        this.prompter = new Prompter(this, profile_fp);
+    async start(profile_fp, load_mem = false, init_message = null, count_id = 0, commandListText = '') {
+        this.commandListText = commandListText; // 保存命令列表文本
+
+        this.prompter = new Prompter(this, profile_fp, this.commandListText);
         this.name = this.prompter.getName();
         this.history = new History(this);
         this.coder = new Coder(this);
@@ -36,12 +38,12 @@ export class Agent {
         this.bot.once('spawn', async () => {
             addViewer(this.bot, count_id);
 
-            // wait for a bit so stats are not undefined
+            // 等待一段时间，以确保统计数据已定义
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
             console.log(`${this.name} spawned.`);
             this.coder.clear();
-            
+
             const ignore_messages = [
                 "Set own game mode to",
                 "Set the time to",
@@ -53,7 +55,7 @@ export class Agent {
             const eventname = settings.profiles.length > 1 ? 'whisper' : 'chat';
             this.bot.on(eventname, async (username, message) => {
                 if (username === this.name) return;
-                
+
                 if (ignore_messages.some((m) => message.startsWith(m))) return;
 
                 let translation = await handleEnglishTranslation(message);
@@ -61,20 +63,20 @@ export class Agent {
                 console.log('received message from', username, ':', translation);
 
                 this.shut_up = false;
-    
+
                 this.handleMessage(username, translation);
             });
 
-            // set the bot to automatically eat food when hungry
+            // 设置机器人在饥饿时自动进食
             this.bot.autoEat.options = {
                 priority: 'foodPoints',
                 startAt: 14,
                 bannedFood: ["rotten_flesh", "spider_eye", "poisonous_potato", "pufferfish", "chicken"]
             };
 
-            if (save_data && save_data.self_prompt) { // if we're loading memory and self-prompting was on, restart it, ignore init_message
+            if (save_data && save_data.self_prompt) {
                 let prompt = save_data.self_prompt;
-                // add initial message to history
+                // 将初始消息添加到历史记录中
                 this.history.add('system', prompt);
                 this.self_prompter.start(prompt);
             }
@@ -82,7 +84,7 @@ export class Agent {
                 this.handleMessage('system', init_message, 2);
             }
             else {
-                const translation = await handleTranslation("Hello world! I am "+this.name);
+                const translation = await handleTranslation("Hello world! I am " + this.name);
                 this.bot.chat(translation);
                 this.bot.emit('finished_executing');
             }
@@ -91,8 +93,7 @@ export class Agent {
         });
     }
 
-
-    async cleanChat(message, translate_up_to=-1) {
+    async cleanChat(message, translate_up_to = -1) {
         let to_translate = message;
         let remainging = '';
         if (translate_up_to != -1) {
@@ -100,7 +101,7 @@ export class Agent {
             remainging = message.substring(translate_up_to);
         }
         message = (await handleTranslation(to_translate)).trim() + " " + remainging;
-        // newlines are interpreted as separate chats, which triggers spam filters. replace them with spaces
+        // 换行符被解释为单独的聊天，这会触发垃圾邮件过滤器。将它们替换为空格
         message = message.replaceAll('\n', ' ');
         return this.bot.chat(message);
     }
@@ -112,12 +113,12 @@ export class Agent {
         }
     }
 
-    async handleMessage(source, message, max_responses=null) {
+    async handleMessage(source, message, max_responses = null) {
         let used_command = false;
         if (max_responses === null) {
             max_responses = settings.max_commands === -1 ? Infinity : settings.max_commands;
         }
-        if (max_responses === -1){
+        if (max_responses === -1) {
             max_responses = Infinity;
         }
 
@@ -132,12 +133,12 @@ export class Agent {
                 }
                 this.bot.chat(`*${source} used ${user_command_name.substring(1)}*`);
                 if (user_command_name === '!newAction') {
-                    // all user initiated commands are ignored by the bot except for this one
-                    // add the preceding message to the history to give context for newAction
+                    // 所有用户发起的命令都被机器人忽略，除了这个
+                    // 将前面的消息添加到历史记录中，以提供 newAction 的上下文
                     this.history.add(source, message);
                 }
                 let execute_res = await executeCommand(this, message);
-                if (execute_res) 
+                if (execute_res)
                     this.cleanChat(execute_res);
                 return true;
             }
@@ -158,18 +159,18 @@ export class Agent {
         await this.history.add(source, message);
         this.history.save();
 
-        if (!self_prompt && this.self_prompter.on) // message is from user during self-prompting
-            max_responses = 1; // force only respond to this message, then let self-prompting take over
-        for (let i=0; i<max_responses; i++) {
+        if (!self_prompt && this.self_prompter.on)
+            max_responses = 1; // 强制只响应此消息，然后让自我提示接管
+        for (let i = 0; i < max_responses; i++) {
             if (checkInterrupt()) break;
             let history = this.history.getHistory();
-            let res = await this.prompter.promptConvo(history);
+            let res = await this.prompter.promptConvo(history); // 不需要修改这里
 
             let command_name = containsCommand(res);
 
-            if (command_name) { // contains query or command
-                console.log(`Full response: ""${res}""`)
-                res = truncCommandMessage(res); // everything after the command is ignored
+            if (command_name) { // 包含查询或命令
+                console.log(`Full response: "${res}"`)
+                res = truncCommandMessage(res); // 忽略命令之后的所有内容
                 this.history.add(this.name, res);
                 if (!commandExists(command_name)) {
                     this.history.add('system', `Command ${command_name} does not exist.`);
@@ -187,12 +188,12 @@ export class Agent {
                 if (settings.verbose_commands) {
                     this.cleanChat(res, res.indexOf(command_name));
                 }
-                else { // only output command name
+                else { // 仅输出命令名称
                     let pre_message = res.substring(0, res.indexOf(command_name)).trim();
                     let chat_message = `*used ${command_name.substring(1)}*`;
                     if (pre_message.length > 0)
                         chat_message = `${pre_message}  ${chat_message}`;
-                    this.cleanChat(res);
+                    this.cleanChat(chat_message);
                 }
 
                 let execute_res = await executeCommand(this, res);
@@ -205,7 +206,7 @@ export class Agent {
                 else
                     break;
             }
-            else { // conversation response
+            else { // 仅为对话响应
                 this.history.add(this.name, res);
                 this.cleanChat(res);
                 console.log('Purely conversational response:', res);
@@ -219,16 +220,16 @@ export class Agent {
     }
 
     startEvents() {
-        // Custom events
+        // 自定义事件
         this.bot.on('time', () => {
             if (this.bot.time.timeOfDay == 0)
-            this.bot.emit('sunrise');
+                this.bot.emit('sunrise');
             else if (this.bot.time.timeOfDay == 6000)
-            this.bot.emit('noon');
+                this.bot.emit('noon');
             else if (this.bot.time.timeOfDay == 12000)
-            this.bot.emit('sunset');
+                this.bot.emit('sunset');
             else if (this.bot.time.timeOfDay == 18000)
-            this.bot.emit('midnight');
+                this.bot.emit('midnight');
         });
 
         let prev_health = this.bot.health;
@@ -241,8 +242,8 @@ export class Agent {
             }
             prev_health = this.bot.health;
         });
-        // Logging callbacks
-        this.bot.on('error' , (err) => {
+        // 日志回调
+        this.bot.on('error', (err) => {
             console.error('Error event!', err);
         });
         this.bot.on('end', (reason) => {
@@ -265,15 +266,15 @@ export class Agent {
         });
         this.bot.on('idle', () => {
             this.bot.clearControlStates();
-            this.bot.pathfinder.stop(); // clear any lingering pathfinder
+            this.bot.pathfinder.stop(); // 清除任何残留的寻路器
             this.bot.modes.unPauseAll();
             this.coder.executeResume();
         });
 
-        // Init NPC controller
+        // 初始化 NPC 控制器
         this.npc.init();
 
-        // This update loop ensures that each update() is called one at a time, even if it takes longer than the interval
+        // 这个更新循环确保每次调用的 update() 是一次性的，即使它花费的时间超过了间隔
         const INTERVAL = 300;
         let last = Date.now();
         setTimeout(async () => {
@@ -299,8 +300,8 @@ export class Agent {
     isIdle() {
         return !this.coder.executing && !this.coder.generating;
     }
-    
-    cleanKill(msg='Killing agent process...') {
+
+    cleanKill(msg = 'Killing agent process...') {
         this.history.add('system', msg);
         this.bot.chat('Goodbye world.')
         this.history.save();

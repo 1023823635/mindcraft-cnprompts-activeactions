@@ -28,6 +28,10 @@ const argv = yargs(args)
         type: 'number',
         default: 0,
         description: 'identifying count for multi-agent scenarios',
-    }).argv
+    }).argv;
 
-new Agent().start(argv.profile, argv.load_memory, argv.init_message, argv.count_id);
+// 从环境变量中获取命令列表文本
+const commandListText = process.env.COMMAND_LIST_TEXT || '';
+
+// 启动 Agent，并将 commandListText 传递给它
+new Agent().start(argv.profile, argv.load_memory, argv.init_message, argv.count_id, commandListText);

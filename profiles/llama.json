@@ -24,7 +24,7 @@
         "cheat": true
     },
 
-    "conversation_examples": [
+"conversation_examples": [
         [
             {"role": "user", "content": "miner_32: Hey! What are you up to?"},
             {"role": "assistant", "content": "Nothing much miner_32, what do you need?"}

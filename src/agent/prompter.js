@@ -1,6 +1,5 @@
-import { readFileSync, mkdirSync, writeFileSync} from 'fs';
+import { readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { Examples } from '../utils/examples.js';
-import { getCommandDocs } from './commands/index.js';
 import { getSkillDocs } from './library/index.js';
 import { stringifyTurns } from '../utils/text.js';
 import { getCommand } from './commands/index.js';
@@ -14,12 +13,13 @@ import { GroqCloudAPI } from '../models/groq.js';
 import { HuggingFace } from '../models/huggingface.js';
 
 export class Prompter {
-    constructor(agent, fp) {
+    constructor(agent, fp, commandListText = '') {
         this.agent = agent;
         this.profile = JSON.parse(readFileSync(fp, 'utf8'));
+        this.commandListText = commandListText; // 保存命令列表文本
         this.convo_examples = null;
         this.coding_examples = null;
-        
+
         let name = this.profile.name;
         let chat = this.profile.model;
         this.cooldown = this.profile.cooldown ? this.profile.cooldown : 0;
@@ -30,7 +30,7 @@ export class Prompter {
         if (this.profile.max_tokens)
             max_tokens = this.profile.max_tokens;
         if (typeof chat === 'string' || chat instanceof String) {
-            chat = {model: chat};
+            chat = { model: chat };
             if (chat.model.includes('gemini'))
                 chat.api = 'google';
             else if (chat.model.includes('gpt') || chat.model.includes('o1'))
@@ -70,12 +70,12 @@ export class Prompter {
         let embedding = this.profile.embedding;
         if (embedding === undefined) {
             if (chat.api !== 'ollama')
-                embedding = {api: chat.api};
+                embedding = { api: chat.api };
             else
-                embedding = {api: 'none'};
+                embedding = { api: 'none' };
         }
         else if (typeof embedding === 'string' || embedding instanceof String)
-            embedding = {api: embedding};
+            embedding = { api: embedding };
 
         console.log('Using embedding settings:', embedding);
 
@@ -110,18 +110,15 @@ export class Prompter {
     }
 
     async initExamples() {
-        // Using Promise.all to implement concurrent processing
-        // Create Examples instances
         this.convo_examples = new Examples(this.embedding_model);
         this.coding_examples = new Examples(this.embedding_model);
-        // Use Promise.all to load examples concurrently
         await Promise.all([
             this.convo_examples.load(this.profile.conversation_examples),
             this.coding_examples.load(this.profile.coding_examples),
         ]);
     }
 
-    async replaceStrings(prompt, messages, examples=null, to_summarize=[], last_goals=null) {
+    async replaceStrings(prompt, messages, examples = null, to_summarize = [], last_goals = null) {
         prompt = prompt.replaceAll('$NAME', this.agent.name);
 
         if (prompt.includes('$STATS')) {
@@ -133,7 +130,7 @@ export class Prompter {
             prompt = prompt.replaceAll('$INVENTORY', inventory);
         }
         if (prompt.includes('$COMMAND_DOCS'))
-            prompt = prompt.replaceAll('$COMMAND_DOCS', getCommandDocs());
+            prompt = prompt.replaceAll('$COMMAND_DOCS', this.commandListText);
         if (prompt.includes('$CODE_DOCS'))
             prompt = prompt.replaceAll('$CODE_DOCS', getSkillDocs());
         if (prompt.includes('$EXAMPLES') && examples !== null)
@@ -168,7 +165,7 @@ export class Prompter {
             }
         }
 
-        // check if there are any remaining placeholders with syntax $<word>
+        // 检查是否存在未替换的占位符
         let remaining = prompt.match(/\$[A-Z_]+/g);
         if (remaining !== null) {
             console.warn('Unknown prompt placeholders:', remaining.join(', '));
@@ -212,7 +209,7 @@ export class Prompter {
         let user_message = 'Use the below info to determine what goal to target next\n\n';
         user_message += '$LAST_GOALS\n$STATS\n$INVENTORY\n$CONVO'
         user_message = await this.replaceStrings(user_message, messages, null, null, last_goals);
-        let user_messages = [{role: 'user', content: user_message}];
+        let user_messages = [{ role: 'user', content: user_message }];
 
         let res = await this.chat_model.sendRequest(user_messages, system_message);
 
