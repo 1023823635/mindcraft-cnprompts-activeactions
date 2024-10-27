@@ -350,8 +350,9 @@ export const actionsList = [
     {
         name: '!stay',
         description: 'Stay in the current location no matter what. Pauses all modes.',
-        perform: wrapExecution(async (agent) => {
-            await skills.stay(agent.bot);
+        params: {'type': { type: 'int', description: 'The number of seconds to stay. -1 for forever.', domain: [-1, Number.MAX_SAFE_INTEGER] }},
+        perform: wrapExecution(async (agent, seconds) => {
+            await skills.stay(agent.bot, seconds);
         })
     },
     // !setMode: 开启或关闭指定模式，模式是持续检查和响应环境的自动行为
